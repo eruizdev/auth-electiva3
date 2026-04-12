@@ -83,3 +83,69 @@ func Login(c *gin.Context) {
 		User:         user,
 	})
 }
+
+
+// Refresh renueva el access_token usando el refresh_token
+func Refresh(c *gin.Context) {
+	var req models.RefreshRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var userID int
+	err := db.DB.QueryRow(
+		`SELECT user_id FROM refresh_tokens WHERE token = $1 AND expires_at > NOW()`,
+		req.RefreshToken,
+	).Scan(&userID)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token inválido o expirado"})
+		return
+	}
+
+	var user models.User
+	db.DB.QueryRow(
+		`SELECT id, name, email, role FROM users WHERE id = $1`, userID,
+	).Scan(&user.ID, &user.Name, &user.Email, &user.Role)
+
+	accessToken, newRefreshToken, err := generateTokens(user)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error generando tokens"})
+		return
+	}
+
+	db.DB.Exec(`DELETE FROM refresh_tokens WHERE token = $1`, req.RefreshToken)
+	saveRefreshToken(user.ID, newRefreshToken)
+
+	c.JSON(http.StatusOK, models.TokenResponse{
+		AccessToken:  accessToken,
+		RefreshToken: newRefreshToken,
+		User:         user,
+	})
+}
+
+// Me devuelve los datos del usuario autenticado
+func Me(c *gin.Context) {
+	userID := c.GetInt("user_id")
+
+	var user models.User
+	db.DB.QueryRow(
+		`SELECT id, name, email, role FROM users WHERE id = $1`, userID,
+	).Scan(&user.ID, &user.Name, &user.Email, &user.Role)
+
+	c.JSON(http.StatusOK, user)
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
