@@ -139,6 +139,52 @@ func Me(c *gin.Context) {
 
 
 
+// Logout cierra la sesión
+func Logout(c *gin.Context) {
+	var req models.RefreshRequest
+	if err := c.ShouldBindJSON(&req); err == nil {
+		db.DB.Exec(`DELETE FROM refresh_tokens WHERE token = $1`, req.RefreshToken)
+	}
+	c.SetCookie("access_token", "", -1, "/", "", false, true)
+	c.JSON(http.StatusOK, gin.H{"message": "Sesión cerrada"})
+}
+
+// generateTokens crea access token (1h) y refresh token (7 días)
+func generateTokens(user models.User) (string, string, error) {
+	secret := []byte(os.Getenv("JWT_SECRET"))
+
+	accessToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user_id": user.ID,
+		"email":   user.Email,
+		"role":    user.Role,
+		"exp":     time.Now().Add(1 * time.Hour).Unix(),
+	}).SignedString(secret)
+	if err != nil {
+		return "", "", err
+	}
+
+	refreshToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user_id": user.ID,
+		"exp":     time.Now().Add(7 * 24 * time.Hour).Unix(),
+	}).SignedString(secret)
+	if err != nil {
+		return "", "", err
+	}
+
+	return accessToken, refreshToken, nil
+}
+
+// saveRefreshToken guarda el refresh token en DB
+func saveRefreshToken(userID int, token string) error {
+	expiresAt := time.Now().Add(7 * 24 * time.Hour)
+	_, err := db.DB.Exec(
+		`INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)`,
+		userID, token, expiresAt,
+	)
+	return err
+}
+
+
 
 
 
