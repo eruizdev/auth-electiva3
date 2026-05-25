@@ -125,6 +125,31 @@ func Refresh(c *gin.Context) {
 	})
 }
 
+// GetUsers devuelve una lista simple de todos los usuarios (id y nombre)
+// La usa el frontend para mostrar el nombre del dueno junto a la mascota
+func GetUsers(c *gin.Context) {
+	rows, err := db.DB.Query(`SELECT id, name, email, role FROM users`)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error consultando usuarios"})
+		return
+	}
+	defer rows.Close()
+
+	usuarios := []gin.H{}
+	for rows.Next() {
+		var id int
+		var name, email, role string
+		rows.Scan(&id, &name, &email, &role)
+		usuarios = append(usuarios, gin.H{
+			"id":    id,
+			"name":  name,
+			"email": email,
+			"role":  role,
+		})
+	}
+	c.JSON(http.StatusOK, usuarios)
+}
+
 // Me devuelve los datos del usuario autenticado
 func Me(c *gin.Context) {
 	userID := c.GetInt("user_id")

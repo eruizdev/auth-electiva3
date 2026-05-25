@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	_ "github.com/lib/pq"
+	"golang.org/x/crypto/bcrypt"
 )
 
-// DB es la conexión global a la base de datos
 var DB *sql.DB
 
-// Connect abre la conexión y crea las tablas si no existen
 func Connect() {
 	dsn := fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
@@ -29,8 +29,16 @@ func Connect() {
 		log.Fatal("Error abriendo DB: ", err)
 	}
 
-	if err = DB.Ping(); err != nil {
-		log.Fatal("Error conectando a DB: ", err)
+	// Reintentar conexion hasta 15 veces (espera a que Postgres este listo)
+	for i := 0; i < 15; i++ {
+		if err = DB.Ping(); err == nil {
+			break
+		}
+		log.Printf("DB no lista, reintento %d/15...", i+1)
+		time.Sleep(3 * time.Second)
+	}
+	if err != nil {
+		log.Fatal("No se pudo conectar a DB: ", err)
 	}
 
 	createTables()
@@ -60,4 +68,29 @@ func createTables() {
 	if err != nil {
 		log.Fatal("Error creando tablas: ", err)
 	}
+
+	crearAdminPorDefecto()
+}
+
+// crearAdminPorDefecto inserta un usuario admin si no existe
+func crearAdminPorDefecto() {
+	// Hash bcrypt de la contraseña "admin123"
+	hash, err := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
+	if err != nil {
+		log.Println("Error generando hash admin:", err)
+		return
+	}
+
+	// INSERT solo si no existe ese email (ON CONFLICT no hace nada)
+	_, err = DB.Exec(
+		`INSERT INTO users (name, email, password, role)
+		 VALUES ($1, $2, $3, $4)
+		 ON CONFLICT (email) DO NOTHING`,
+		"Administrador", "admin@velkyvet.com", string(hash), "ADMIN",
+	)
+	if err != nil {
+		log.Println("Error creando admin:", err)
+		return
+	}
+	log.Println("Admin por defecto listo: admin@velkyvet.com / admin123")
 }

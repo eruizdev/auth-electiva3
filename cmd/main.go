@@ -30,6 +30,7 @@ func main() {
 	protected.Use(middleware.AuthRequired())
 	{
 		protected.GET("/me", handlers.Me)
+		protected.GET("/users", handlers.GetUsers)
 	}
 
 	log.Println("Auth Service corriendo en puerto 8081")
